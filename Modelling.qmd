@@ -1,0 +1,163 @@
+---
+title: "Modelling"
+format: 
+  html:
+    code-fold: true
+    embed-resources: true
+editor: visual
+---
+
+**Data Cleaning**
+
+```{r}
+data <- read.table("housing-prices-ge19txt.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+library(dplyr)
+clean_data <- data %>%
+  distinct() %>%  
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), mean(., na.rm = TRUE), .))) 
+
+clean_data$Heat.Type <- as.factor(clean_data$Heat.Type)
+clean_data$Sewer.Type <- as.factor(clean_data$Sewer.Type)
+
+head(clean_data)
+  
+```
+
+#### Backward Selection
+
+```{r}
+#Fitting the full model
+full_model <- lm(Price ~ Lot.Size + Waterfront + Age + Land.Value + New.Construct + 
+                 Central.Air + Heat.Type + Sewer.Type + Living.Area +
+                 Pct.College + Bedrooms + Fireplaces + Bathrooms + Rooms, 
+                 data = clean_data)
+
+#Applying the backward model to data
+backward_model <- step(full_model, direction = "backward")
+
+summary(backward_model)
+
+
+```
+
+#### Forward Selection
+
+```{r}
+# Fitting the Null Model
+null_model <- lm(Price ~ 1, data = clean_data)
+
+# Applying the forward model to data
+forward_model <- step(null_model, scope = list(lower = null_model, upper = full_model), direction = "forward")
+
+summary(forward_model)
+
+```
+
+#### Exhaustive Searches
+
+```{r}
+library(leaps)
+exhaustive_model <- regsubsets(Price ~ Lot.Size + Waterfront + Age + Land.Value + New.Construct + 
+                               Central.Air + Heat.Type + Sewer.Type + Living.Area +
+                               Pct.College + Bedrooms + Fireplaces + Bathrooms + Rooms, 
+                               data = clean_data, nvmax = 15)
+
+summary_exhaustive <- summary(exhaustive_model)
+# Checking which variables are the best to use
+summary_exhaustive$which[which.max(summary_exhaustive$adjr2), ]
+
+```
+
+```{r}
+#Using the best variables found from summary_exhaustive to model
+best_EX_model <- lm(Price ~ Lot.Size + Waterfront + Age + Land.Value + New.Construct + 
+                    Central.Air + Heat.Type + Living.Area + Bathrooms + Rooms, 
+                    data = clean_data)
+
+
+summary(best_EX_model)
+
+```
+
+#### Assessing Model Performance
+
+**Splitting data into Training and Test sets**
+
+```{r}
+# Split the data into training and test sets (80% training, 20% testing)
+set.seed(123)
+n <- nrow(clean_data)
+train_indices <- sample(seq_len(n), size = 0.8 * n)
+train_data <- clean_data[train_indices, ]
+test_data <- clean_data[-train_indices, ]
+
+```
+
+**Assessing Backward Model Performance**
+
+```{r}
+# Fit the backward model on the training set
+backward_model_train <- lm(Price ~ Lot.Size + Waterfront + Age + Land.Value + New.Construct + 
+                           Central.Air + Heat.Type + Living.Area + Bathrooms + Rooms, 
+                           data = train_data)
+
+
+pred_backward <- predict(backward_model_train, newdata = test_data)
+
+# Calculating RMSE and MAE
+rmse_backward <- sqrt(mean((test_data$Price - pred_backward)^2))
+mae_backward <- mean(abs(test_data$Price - pred_backward))
+
+print(paste("Backward Model - RMSE:", rmse_backward, " MAE:", mae_backward))
+
+```
+
+**Assessing Forward Model Performance**
+
+```{r}
+#Fit the forward model on the training set
+forward_model_train <- lm(Price ~ Lot.Size + Waterfront + Age + Land.Value + New.Construct + 
+                          Central.Air + Heat.Type + Living.Area + Bathrooms + Rooms, 
+                          data = train_data)
+
+pred_forward <- predict(forward_model_train, newdata = test_data)
+
+# Calculating RMSE and MAE
+rmse_forward <- sqrt(mean((test_data$Price - pred_forward)^2))
+mae_forward <- mean(abs(test_data$Price - pred_forward))
+
+print(paste("Forward Model - RMSE:", rmse_forward, " MAE:", mae_forward))
+
+```
+
+**4.4 Assessing Exhaustive Search Model Performance**
+
+```{r}
+# Fit the exhaustive model on the training set
+best_EX_model_train <- lm(Price ~ Lot.Size + Waterfront + Age + Land.Value + New.Construct + 
+                          Central.Air + Heat.Type + Living.Area + Bathrooms + Rooms, 
+                          data = train_data)
+
+pred_exhaustive <- predict(best_EX_model_train, newdata = test_data)
+
+# Calculating RMSE and MAE
+rmse_exhaustive <- sqrt(mean((test_data$Price - pred_exhaustive)^2))
+mae_exhaustive <- mean(abs(test_data$Price - pred_exhaustive))
+
+print(paste("Exhaustive Model - RMSE:", rmse_exhaustive, " MAE:", mae_exhaustive))
+
+```
+
+**Comparing All Models**
+
+```{r}
+results <- data.frame(
+  Model = c("Backward Model", "Forward Model", "Exhaustive Model"),
+  RMSE = c(rmse_backward, rmse_forward, rmse_exhaustive),
+  MAE = c(mae_backward, mae_forward, mae_exhaustive)
+)
+
+print(results)
+
+```

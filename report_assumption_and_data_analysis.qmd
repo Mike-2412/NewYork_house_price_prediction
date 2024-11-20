@@ -1,0 +1,292 @@
+---
+title: "report_assumption_and_data_analysis"
+format: html
+editor: visual
+---
+
+```{r}
+# Load in relevant libraries  
+library(tidyverse)
+library(janitor)
+library(ggplot2)
+
+# Load in dataset and clean names
+data <- clean_names(read.table("housing-prices-ge19txt.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE))
+
+# Remove rows where age is zero to avoid -Inf in log transformations
+data <- data %>% filter(age > 0, price > 0, land_value > 0)
+
+# Log-transform the dependent variable for better model performance
+data <- data %>%
+  mutate(
+    log_price = log(price),
+    log_age = log(age), 
+    log_land_value = log(land_value)
+  )
+
+# Include relevant numeric variables
+data_numeric_log <- data %>%
+  select(log_price, log_age, log_land_value, living_area, bathrooms, rooms, lot_size, pct_college, bedrooms)
+
+# Fit a multiple regression model
+model <- lm(log_price ~ log_age + living_area + bathrooms + rooms, data = data_numeric_log)
+
+# Calculate residuals from the model
+residuals <- resid(model)
+
+# Filter outliers based on residuals (more than 3 standard deviations from the mean)
+data_no_outliers <- data_numeric_log %>% 
+  filter(abs(residuals) <= 3 * sd(residuals))
+
+# Get an overview of the filtered dataset
+glimpse(data_no_outliers)
+
+```
+
+```{r}
+
+# Load ggplot2 for plotting
+library(ggplot2)
+
+# Correlation between Age and Log Price
+plot(data_no_outliers$log_age, data_no_outliers$log_price, 
+     xlab = "Log Age", 
+     ylab = "Log Price", 
+     main = "Log Price vs Log Age",
+     col = rgb(152, 97, 175, 175, maxColorValue = 255), 
+     pch = 16)
+abline(lm(log_price ~ log_age, data = data_no_outliers), col = "red")
+
+# Correlation between Living Area and Log Price
+plot(data_no_outliers$living_area, data_no_outliers$log_price, 
+     xlab = "Living Area", 
+     ylab = "Log Price", 
+     main = "Log Price vs Living Area",
+     col = rgb(97, 167, 175, 175, maxColorValue = 255), 
+     pch = 16)
+abline(lm(log_price ~ living_area, data = data_no_outliers), col = "red")
+
+# Correlation between Bathrooms and Log Price
+plot(data_no_outliers$bathrooms, data_no_outliers$log_price, 
+     xlab = "Bathrooms", 
+     ylab = "Log Price", 
+     main = "Log Price vs Bathrooms",
+     col = rgb(97, 175, 113, 175, maxColorValue = 255), 
+     pch = 16)
+abline(lm(log_price ~ bathrooms, data = data_no_outliers), col = "red")
+
+# Correlation between Rooms and Log Price
+plot(data_no_outliers$rooms, data_no_outliers$log_price, 
+     xlab = "Rooms", 
+     ylab = "Log Price", 
+     main = "Log Price vs Rooms",
+     col = rgb(159, 175, 97, 175, maxColorValue = 255), 
+     pch = 16)
+abline(lm(log_price ~ rooms, data = data_no_outliers), col = "red")
+
+
+```
+
+```{r}
+
+library(car)
+
+model <- lm(log_price ~ log_age + living_area + bathrooms + rooms, data = data_no_outliers)
+
+vif_values <- vif(model)
+print(vif_values)
+
+```
+
+```{r}
+
+selected_data <- data_no_outliers[, c("log_age", "living_area", "rooms", "bathrooms")]
+
+cor_matrix <- cor(selected_data, use = "complete.obs")  
+print(cor_matrix)
+
+```
+
+```{r}
+# Homoskedasticity 
+
+# Fit a multiple regression model
+model <- lm(log_price ~ log_age + living_area + bathrooms + rooms, data = data_no_outliers)
+
+# Residuals vs Fitted Plot
+plot(model$fitted.values, resid(model), 
+     xlab = "Fitted Values", 
+     ylab = "Residuals", 
+     main = "Residuals vs Fitted Values",
+     col = rgb(145, 85, 73, 100, maxColorValue = 255))
+
+
+# Add a horizontal line at 0
+abline(h = 0, col = "red")
+
+# Conduct a Breusch-Pagan test
+library(lmtest)
+bp_result <- bptest(model)
+bp_result
+```
+
+```{r}
+# Create a regression model using log of price
+model <- lm(log_price ~ log_age + living_area + bathrooms + rooms, data = data_no_outliers)
+
+# Q-Q plot for checking normality
+qqnorm(resid(model))
+qqline(resid(model), col = "red")  # Reference line
+```
+
+### Models
+
+```{r}
+# Forward Selection
+cat("Creating Forward Selection Model...\n")
+model_forward <- step(lm(log_price ~ 1, data = data_no_outliers), 
+                      scope = list(lower = ~1, upper = ~log_age + living_area + bathrooms + rooms),
+                      direction = "forward")
+
+# Backward Selection
+cat("Creating Backward Selection Model...\n")
+model_backward <- step(lm(log_price ~ log_age + living_area + bathrooms + rooms, data = data_no_outliers), 
+                       direction = "backward")
+
+# Exhaustive Search Model
+cat("Creating Exhaustive Search Model...\n")
+library(leaps)
+exhaustive_model <- regsubsets(log_price ~ log_age + living_area + bathrooms + rooms, 
+                               data = data_no_outliers, nvmax = 5)
+
+# Summary of Exhaustive Search Model
+cat("Exhaustive Search Model Summary:\n")
+exhaustive_summary <- summary(exhaustive_model)
+print(exhaustive_summary)
+
+# Display Adjusted R-squared for each model size
+cat("\nAdjusted R-squared for each model size:\n")
+print(exhaustive_summary$adjr2)
+
+# Selecting the best model formula based on maximum Adjusted R-squared
+cat("Selecting the Best Model from Exhaustive Search Results...\n")
+best_exhaustive_formula <- as.formula(paste("log_price ~", 
+                                            paste(names(coef(exhaustive_model, which.max(exhaustive_summary$adjr2))[-1]), 
+                                                  collapse = " + ")))
+best_exhaustive_model <- lm(best_exhaustive_formula, data = data_no_outliers)
+cat("Best model formula selected from exhaustive search:", deparse(best_exhaustive_formula), "\n")
+
+```
+
+
+```{r}
+# Split data into training and test sets
+set.seed(123)
+n <- nrow(data_no_outliers)
+n_train <- floor(0.8 * n)
+grp_labs <- rep(c("Train", "Test"), times = c(n_train, n - n_train))
+data_no_outliers$grp <- sample(grp_labs)
+
+train_dat <- subset(data_no_outliers, grp == "Train")
+test_dat <- subset(data_no_outliers, grp == "Test")
+
+# Train models on training data
+forward_train <- step(lm(log_price ~ 1, data = train_dat), 
+                      scope = list(lower = ~1, upper = ~log_age + living_area + bathrooms + rooms),
+                      direction = "forward")
+
+backward_train <- step(lm(log_price ~ log_age + living_area + bathrooms + rooms, 
+                          data = train_dat), 
+                       direction = "backward")
+
+# Fit the best exhaustive model on the training set
+exhaustive_train <- lm(best_exhaustive_formula, data = train_dat)
+
+# Predictions on test data
+pred_forward <- predict(forward_train, newdata = test_dat)
+pred_backward <- predict(backward_train, newdata = test_dat)
+pred_exhaustive <- predict(exhaustive_train, newdata = test_dat)
+
+# Calculate RMSE and MAE for each model
+rmse_forward <- sqrt(mean((test_dat$log_price - pred_forward)^2))
+mae_forward <- mean(abs(test_dat$log_price - pred_forward))
+
+rmse_backward <- sqrt(mean((test_dat$log_price - pred_backward)^2))
+mae_backward <- mean(abs(test_dat$log_price - pred_backward))
+
+rmse_exhaustive <- sqrt(mean((test_dat$log_price - pred_exhaustive)^2))
+mae_exhaustive <- mean(abs(test_dat$log_price - pred_exhaustive))
+
+# Print RMSE and MAE for each model
+cat("RMSE and MAE for Forward Selection Model:\n")
+cat("RMSE:", rmse_forward, "\nMAE:", mae_forward, "\n\n")
+
+cat("RMSE and MAE for Backward Selection Model:\n")
+cat("RMSE:", rmse_backward, "\nMAE:", mae_backward, "\n\n")
+
+cat("RMSE and MAE for Exhaustive Search Model:\n")
+cat("RMSE:", rmse_exhaustive, "\nMAE:", mae_exhaustive, "\n")
+
+```
+
+
+```{r}
+# Print summary of the forward selection model
+summary_forward <- summary(model_forward)
+print(summary_forward)
+
+# Print summary of the backward selection model
+summary_backward <- summary(model_backward)
+print(summary_backward)
+
+# Print summary of the best model from exhaustive search
+summary_exhaustive <- summary(best_exhaustive_model)
+print(summary_exhaustive)
+
+```
+
+```{r}
+# AIC and BIC for Forward Selection Model
+aic_forward <- AIC(model_forward)
+bic_forward <- BIC(model_forward)
+cat("AIC for Forward Selection Model:", aic_forward, "\n")
+cat("BIC for Forward Selection Model:", bic_forward, "\n\n")
+
+# AIC and BIC for Backward Selection Model
+aic_backward <- AIC(model_backward)
+bic_backward <- BIC(model_backward)
+cat("AIC for Backward Selection Model:", aic_backward, "\n")
+cat("BIC for Backward Selection Model:", bic_backward, "\n\n")
+
+# AIC and BIC for Exhaustive Search Model (using the best model from exhaustive search)
+aic_exhaustive <- AIC(best_exhaustive_model)
+bic_exhaustive <- BIC(best_exhaustive_model)
+cat("AIC for Exhaustive Search Model:", aic_exhaustive, "\n")
+cat("BIC for Exhaustive Search Model:", bic_exhaustive, "\n")
+
+```
+```{r}
+# Extract coefficients from the forward selection model
+forward_coefficients <- coef(model_forward)
+
+# Format the equation string
+equation_forward <- paste0(
+  "log(Price) = ", round(forward_coefficients[1], 6), " + ",
+  paste(
+    sapply(2:length(forward_coefficients), function(i) {
+      paste0(round(forward_coefficients[i], 6), " * ", names(forward_coefficients)[i])
+    }),
+    collapse = " + "
+  )
+)
+
+# Print the equation
+cat("Equation for Forward Selection Model:\n", equation_forward, "\n")
+
+print(forward_coefficients)
+
+
+```
+
+
+

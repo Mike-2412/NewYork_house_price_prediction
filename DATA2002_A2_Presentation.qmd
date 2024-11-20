@@ -1,0 +1,395 @@
+---
+title: "New York House Prices"
+subtitle: "Group L12 G03"
+author: "Cifti Saggu, Daniella Jaqin, Hamza Ahmed, Zichen Liu and Mike Xu"
+format: 
+  revealjs:
+    auto-slide: 20000
+    embed-resources: true
+    theme: serif
+---
+
+```{r setup, message = FALSE}
+# Load in relevant libraries.  
+library(tidyverse)
+library(janitor)
+library(ggplot2)
+
+# Load in data set
+# Separate into variables since file originally in a .txt format
+data <- clean_names(read.table("housing-prices-ge19txt.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE))
+
+data$log_price <- log(data$price) # log the dependent variable for better model performance
+
+# Include all relevant numeric variables from the data set
+data_numeric_log <- data[ c("log_price", "age", "land_value", "living_area", "bathrooms", "rooms", "lot_size","pct_college", "bedrooms" )]
+```
+
+## Data Description
+
+#### [Introduction]{style="color:purple;"}
+
+-   **Random sample** of data from a county in New York
+
+-   It’s sourced from the [**Data And Story Library (DASL)**](https://dasl.datadescription.com/datafile/housing-prices-ge19).
+
+-   Clean, since no missing variables [✔]{style="color:green;"}.
+
+-   Dependent variable → **price** which represents the sales price of each house
+
+-   Independent variables → **age, land value, living area, bathrooms, and rooms**
+
+## Data Description
+
+#### [Variables]{style="color:purple;"}
+
+-   **Age** - The age of the house, typically measured from the year of construction till current (2023 in this case).
+-   **Land Value (USD)** - The assessed value of the land.
+-   **Living Area (sq ft)** - The size of the interior living space of the house.
+-   **Bathrooms** - This includes full bathrooms and half-baths.
+-   **Number of Rooms** - This represents the total number of rooms in the house.
+
+## Data Description
+
+#### [2. Categories]{style="color:purple;"}
+
+-   **Numerical Continuous**: Age, Land Value, Living Area
+-   **Numerical Discrete**: Bathrooms, Number of Rooms
+
+```{r}
+#| fig-cap: "Source: [Depositphotos](https://depositphotos.com/photos/categories.html)"
+#| fig-align: "center"
+#| fig-width: 6
+
+knitr::include_graphics("categories.png")
+```
+
+## Appropriate model selection - Mike
+
+-   [**Goal:**]{style="color:royalblue;"} Predict house prices based on several property characteristics.
+
+-   [**How did we do this?**]{style="color:royalblue;"} Focus on multiple regression by selecting the best variables for the predictive model
+
+-   [**What models we compared?**]{style="color:royalblue;"} The forward and backward step wise selection and exhaustive search model.
+
+```{r}
+#| fig-cap: "Source: [iStock](https://www.istockphoto.com/photos/machine-learning)"
+#| fig-align: "center"
+#| fig-width: 6
+
+knitr::include_graphics("modelling.png")
+```
+
+## Appropriate model selection
+
+[✔]{style="color:green;"} These methods helped identify the most relevant property features that contribute to accurate price predictions.
+
+[✔]{style="color:green;"} Multiple regression model:
+
+-   Reliable predictions
+
+-   Clearer insights into house features and prices
+
+-   Simple and Interpretable
+
+## **Assumptions**
+
+#### [1. Linearity]{style="color:purple;"}
+
+```{r}
+library(qtlcharts)
+
+# Create an interactive correlation plot
+htmlwidgets::saveWidget(iplotCorr(data_numeric_log), "correlation_plot.html")
+```
+<iframe src="correlation_plot.html" width="80%" height="425" frameborder="0"></iframe>
+
+[Given the correlation plots we have chosen the variables:[**age, land value, living area, bathrooms and rooms**]{style="color:green;"}]{style="font-size: 20px;"}
+
+## **Assumptions**
+
+#### [2. Independance]{style="color:purple;"}
+
+```{r, fig-independance_plots, warning=FALSE, message=FALSE, fig.cap= "Residual Plots for Predictors vs Model", out.extra = 'style="display:block; margin-bottom:30px; text-align:center;"'}
+
+model <- lm(log_price ~ age + land_value + living_area + bathrooms + rooms, data = data_numeric_log)
+
+par(mfrow = c(2, 3))
+
+# Residuals and Age
+plot(data_numeric_log$age, resid(model), 
+     xlab = "Age", 
+     ylab = "Residuals", 
+     main = "Residuals vs Age",
+     col = rgb(152, 97, 175, 175, maxColorValue = 255))
+abline(h = 0, col = "red")
+
+# Residuals and Land Value
+plot(data_numeric_log$land_value, resid(model), 
+     xlab = "Land Value", 
+     ylab = "Residuals", 
+     main = "Residuals vs Land Value",
+     col = rgb(97, 108, 175, 175, maxColorValue = 255))
+
+abline(h = 0, col = "red")
+
+# Residuals and Living Area
+plot(data_numeric_log$living_area, resid(model), 
+     xlab = "Living Area", 
+     ylab = "Residuals", 
+     main = "Residuals vs Living Area",
+     col = rgb(97, 167, 175, 175, maxColorValue = 255))
+abline(h = 0, col = "red")
+
+# Residuals and Bathrooms
+plot(data_numeric_log$bathrooms, resid(model), 
+     xlab = "Bathrooms", 
+     ylab = "Residuals", 
+     main = "Residuals vs Bathrooms",
+     col = rgb(97, 175, 113, 175, maxColorValue = 255))
+abline(h = 0, col = "red")
+
+# Residuals and Rooms
+plot(data_numeric_log$rooms, resid(model), 
+     xlab = "Rooms", 
+     ylab = "Residuals", 
+     main = "Residuals vs Rooms",
+     col = rgb(159, 175, 97, 175, maxColorValue = 255))
+abline(h = 0, col = "red")
+```
+
+## **Assumptions**
+
+#### [3. Homoskedasticity]{style="color:purple;"}
+
+```{r, fig-homoskedasticity_check, warning=FALSE, message=FALSE, fig.cap= "Residual Plot of Chosen Variables", out.extra = 'style="display:block; margin-bottom:30px; text-align:center;"'}
+
+# Homoskedasticity 
+
+# Fit a multiple regression model
+model <- lm(log_price ~ age + land_value + living_area + bathrooms + rooms, data = data_numeric_log)
+
+# Residuals vs Fitted Plot
+plot(model$fitted.values, resid(model), 
+     xlab = "Fitted Values", 
+     ylab = "Residuals", 
+     main = "Residuals vs Fitted Values",
+     col = rgb(145, 85, 73, 100, maxColorValue = 255))
+
+
+# Add a horizontal line at 0
+abline(h = 0, col = "red")
+
+# Conduct a Breusch-Pagan test
+library(lmtest)
+bp_result <- bptest(model)
+
+```
+
+[**Breusch-Pagan test** checks for heteroskedasticity and since the p-value (`r signif(bp_result$p.value, 3)`) is \> 0.05, this suggests there is limited evidence of heteroskedasticity. Therefore, the residuals indicate that the **assumption of constant variance holds**.]{style="font-size: 20px"}
+
+## **Assumptions**
+
+#### [4. Normality]{style="color:purple;"}
+
+```{r, fig-qq_plot, warning=FALSE, message=FALSE, fig.cap= "Q-Q Plot of Linear Numeric Variables"}
+# Create a regression model using log of price
+model <- lm(log_price ~ age + land_value + living_area + bathrooms + rooms, data = data_numeric_log)
+
+# Q-Q plot for checking normality
+qqnorm(resid(model))
+qqline(resid(model), col = "red")  # Reference line
+```
+
+## Comparing Models
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+# Forward Selection
+model_forward <- step(lm(log_price ~ 1, data = data_numeric_log), 
+                      scope = list(lower = ~1, upper = ~age + land_value + living_area + bathrooms + rooms),
+                      direction = "forward")
+
+# Backward Selection
+model_backward <- step(lm(log_price ~ age + land_value + living_area + bathrooms + rooms, data = data_numeric_log), 
+                       direction = "backward")
+
+# Exhaustive Search Model
+library(leaps)
+exhaustive_model <- regsubsets(log_price ~ age + land_value + living_area + bathrooms + rooms, 
+                               data = data_numeric_log, nvmax = 5)
+best_model_formula <- log_price ~ age + land_value + living_area
+best_exhaustive_model <- lm(best_model_formula, data = data_numeric_log)
+
+# Exhaustive Search Model Summary
+library(leaps)
+exhaustive_model <- regsubsets(log_price ~ age + land_value + living_area + bathrooms + rooms, 
+                               data = data_numeric_log, nvmax = 5)
+# Exhaustive Search Model Summary
+library(leaps)
+exhaustive_model <- regsubsets(log_price ~ age + land_value + living_area + bathrooms + rooms, 
+                               data = data_numeric_log, nvmax = 5)
+
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='hide'}
+set.seed(123)
+
+# Splitting data into training and test set
+n <- nrow(data_numeric_log)
+n_train <- floor(0.8 * n)
+grp_labs <- rep(c("Train", "Test"), times = c(n_train, n - n_train))
+data_numeric_log$grp <- sample(grp_labs)
+
+train_dat <- subset(data_numeric_log, grp == "Train")
+test_dat <- subset(data_numeric_log, grp == "Test")
+
+# Training Models
+forward_train <- step(lm(log_price ~ 1, data = train_dat), 
+                            scope = list(lower = ~1, upper = ~age + land_value + living_area + bathrooms + rooms),
+                            direction = "forward")
+
+backward_train <- step(lm(log_price ~ age + land_value + living_area + bathrooms + rooms, 
+                                data = train_dat), 
+                             direction = "backward")
+
+Exmod_train <- lm(log_price ~ age + land_value + living_area, data = train_dat)
+
+# Generating predictions on test data
+pred_forward <- predict(forward_train, newdata = test_dat)
+pred_backward <- predict(backward_train, newdata = test_dat)
+pred_exhaustive <- predict(Exmod_train, newdata = test_dat)
+
+# Calculating RMSE and MAE 
+rmse_forward <- sqrt(mean((test_dat$log_price - pred_forward)^2))
+mae_forward <- mean(abs(test_dat$log_price - pred_forward))
+
+rmse_backward <- sqrt(mean((test_dat$log_price - pred_backward)^2))
+mae_backward <- mean(abs(test_dat$log_price - pred_backward))
+
+rmse_exhaustive <- sqrt(mean((test_dat$log_price - pred_exhaustive)^2))
+mae_exhaustive <- mean(abs(test_dat$log_price - pred_exhaustive))
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Creating a comparison table for Models
+comparison_table <- data.frame(
+  Model = c("Forward Selection", "Backward Selection", "Exhaustive Search"),
+  Accuracy = c(
+    paste0("✔ MAE: ", round(mae_forward, 5), "\nRMSE: ", round(rmse_forward, 5), "\nR²: 0.5586"), 
+    paste0("✔ MAE: ", round(mae_backward, 5), "\nRMSE: ", round(rmse_backward, 5), "\nR²: 0.5586"), 
+    paste0("✔ MAE: ", round(mae_exhaustive, 5), "\nRMSE: ", round(rmse_exhaustive, 5), "\nR²: 0.5467")
+  ),
+  Scalability = c("✔ Adapts well to new data", 
+                  "✘ Overfit risk on larger data", 
+                  "✘ Expensive Computationally"),
+  Interpretability = c("✔Straightforward", 
+                       "✘ Complex interactions", 
+                       "✘ Difficult to explain"),
+  Simplicity = c("✔ Highlights Key Drivers\nAIC: 792.91\nBIC: 831.12", 
+                 "✘ Complex to implement\nAIC: 792.91\nBIC: 831.12", 
+                 "✘ complex & overwhelming\nAIC: 835.16\nBIC: 862.46")
+)
+
+# Adding design
+library(kableExtra)
+kbl(comparison_table, caption = "Model Comparison Based on Key Criteria") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = F, 
+                font_size = 20) %>%
+  row_spec(1, bold = TRUE, color = "white", background = "green") %>%
+  column_spec(2, width = "4.5cm") %>%  # Make Accuracy column wider (adjust width value as needed)
+  column_spec(3:5, width = "4cm") %>%  # Adjust other columns if necessary
+  kable_classic(html_font = "Arial") %>%
+  row_spec(0, extra_css = "background-color: #f0f0f0;")
+
+```
+
+## Model Outputs
+
+::: columns
+::: {.column width="33%"}
+#### [Forward Model]{style="color:purple;"}
+
+![](Forward Model.png)
+:::
+
+::: {.column width="33%"}
+#### [Backward Model]{style="color:purple;"}
+
+![](Backward Model.png)
+:::
+
+::: {.column width="33%"}
+#### [Exhaustive Search]{style="color:purple;"}
+
+![](Exhaustive.png){width="100%"}
+:::
+:::
+
+## [Why Forward Model is Best]{style="color:green;"}
+
+-   **Ideal for stakeholders:** Highlights key variables impacting price and utilizes new data only when it improves accuracy
+-   **Avoids unnecessary, complex interactions:** perfect for non-technical audiences
+-   **Mirrors real-world property assessment**, starting from basics (size) to more specific features (bedrooms, bathrooms, age).
+
+## [Limitations]{style="color:orange;"}
+
+-   **Nature of Data set:**
+    -   Most of initial data set was categorical, limiting the continuous predictors used in Model.
+
+    -   Due to it being specific to the New York setting, it may not be applicable to other states or countries.
+
+    -   Variables with non-linear relationship cannot be included as a result limiting the features of a house that can be compared.
+
+## [Future Improvements]{style="color:royalblue;"}
+
+**Improve Data set:** Include location or economic indicators(inflation, interest rates) and add more continuous predictors to give finer granularity
+
+**Consider Non-Linear Models** (e.g., decision trees, random forests) to capture complex relationships without sacrificing interpretability.
+
+## **Conclusion**
+
+-   The data used in this analysis is a random sample of houses taken from a New York County
+-   **Our goal:** To find the extent to which numeric features of a house impact its price in the sample provided of houses in New York
+
+```{r}
+#| fig-cap: "Source: [iStock](https://www.istockphoto.com/photo/rising-prices-for-real-estate-gm1391413216-448030710)"
+#| fig-align: "center"
+#| fig-width: 6
+
+knitr::include_graphics("house_stock_image.png")
+```
+
+## Key Findings
+
+-   We used the multiple regression workflow to deduce an equation which assists in identifying to what extent numeric features impact the price of a house.
+
+> [**log(Price)= 0.0002983×(living area) + 0.000003596×(land value) + 0.1107×(bathrooms) − 0.001356×(age) + 0.009131×(rooms)**]{style="color: purple; font-size: 18px;"}
+
+## Key Findings
+
+> [**log(Price)= 0.0002983×(living area) + 0.000003596×(land value) + 0.1107×(bathrooms) − 0.001356×(age) + 0.009131×(rooms)**]{style="color: purple; font-size: 18px;"}
+
+::: {.table-wrapper style="font-size: 28px;"}
+| Feature                         | Effect (Increase/Decrease) | \% Effect on Price |
+|-----------------------------|-------------------------|------------------|
+| Bathrooms (number of bathrooms) | Increase                   | 11.07%             |
+| Rooms (number of rooms)         | Increase                   | 0.91%              |
+| Living Area (square feet)       | Increase                   | 0.03%              |
+| Age (years)                     | Decrease                   | 0.14%              |
+| Land Value (US dollars)         | Increase                   | 0.0004%            |
+:::
+
+## Why People Should Care
+
+-   Understanding the features and factors is critical for us all as **potential future homeowners, but also for investors, real estate agents, policymakers, and developers** who rely on this knowledge to make decisions.
+
+-   Although this data is from New York, it highlights the key features of a house that can lead to significant price differences.
+
+## [Final Takeaway]{style="color:mediumvioletred;"}
+
+-   Bathrooms had the biggest impact on price with the number of rooms following second.
+
+-   A house’s age, land value and living area all had a small impact as well with age being the only one that led to a decrease in price.
+
+-   [**Thank you for your attention**]{style="color:mediumslateblue;"} and we hope this assisted in your home buying decisions!

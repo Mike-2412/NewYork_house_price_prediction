@@ -1,0 +1,194 @@
+---
+  title: "Assumptions"
+format: 
+  html:
+  code-fold: TRUE
+embed-resources: true
+editor: visual
+---
+
+```{r}
+
+# Load in relevant libraries
+library(tidyverse)
+library(janitor)
+library(ggplot2)
+library(GGally)
+
+
+# Load in data set
+# Separate into variables since file originally in a .txt format
+data <- clean_names(read.table("housing-prices-ge19txt.txt", header = TRUE, sep = "\t", stringsAsFactors = FALSE))
+
+# Include all relevant numeric variables from the dataset
+data_numeric <- data[, c("price", "lot_size", "age", "land_value", "living_area", "pct_college", "bedrooms", "bathrooms", "rooms")]
+
+# Get an overview of the data set
+glimpse(data)
+
+```
+```{r}
+
+# Workflow: hypothesis, assumptions. test statistic, observed test statistics, p-value, decision
+
+```
+
+
+```{r}
+# Load necessary library
+library(gridExtra)
+
+# Create individual scatter plots for each variable against price
+variables <- c("lot_size", "age", "land_value", "pct_college", "bedrooms", "bathrooms", "rooms")
+
+# Initialize an empty list to store plots
+plots <- list()
+
+# Loop through each variable and create a scatter plot with price
+for (var in variables) {
+  p <- ggplot(data_numeric, aes_string(x = var, y = "price")) +
+    geom_point(size = 1, alpha = 0.6, color = "steelblue2") +  # Scatter points
+    labs(x = var, y = "Price") +  # Label axes
+    theme_bw(base_size = 14)  # Use theme_bw for clean background and adjust base font size
+  print(p)  # Print each plot
+}
+
+```
+
+# NON LOG
+
+```{r}
+
+# Check assumptions for New York Housing Prices Data set
+
+# 1. Linearity
+
+# Load necessary libraries
+library(tidyr)
+library(dplyr)
+
+data_numeric <- data[, c("price", "lot_size", "age", "land_value", "pct_college", "bedrooms", "bathrooms", "rooms")]
+
+# Assuming data_numeric contains only numeric variables
+# Calculate the correlation matrix
+cor_mat <- cor(data_numeric)
+
+# Convert the correlation matrix into a long format
+melted_cor_mat <- cor_mat |>
+  as.data.frame() |>
+  rownames_to_column(var = "var1") |>  # Move row names to a column called "var1"
+  pivot_longer(cols = -var1,           # Reshape data from wide to long
+               names_to = "var2",
+               values_to = "cor") |>   # Name the new columns
+  arrange(desc(cor))                   # Optional: Arrange by the correlation value
+
+library(ggplot2)
+
+# Plotting the correlation matrix as a heat map
+ggplot(melted_cor_mat, aes(x = var1, y = var2, fill = cor)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "steelblue", high = "seagreen", mid = "white", midpoint = 0, limit = c(-1,1), space = "Lab", name="Correlation") +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  labs(title = "Correlation Heatmap", x = "Variables", y = "Variables")
+
+
+library(qtlcharts)
+
+# Create an interactive correlation plot
+iplotCorr(data_numeric)
+
+```
+
+# LOG:
+
+```{r}
+
+# Load necessary libraries
+library(tidyverse)
+library(ggplot2)
+library(qtlcharts)
+
+# Log-transform the `price` variable
+data_numeric$log_price <- log(data_numeric$price)
+
+# Now include the log transformed `price` in the correlation matrix
+data_numeric_log <- data_numeric[, c("log_price", "lot_size", "age", "land_value", "pct_college", "bedrooms", "bathrooms", "rooms")]
+
+# Calculate the correlation matrix with log_price
+cor_mat_log <- cor(data_numeric_log)
+
+# Convert the correlation matrix into a long format for ggplot
+melted_cor_mat_log <- as.data.frame(as.table(cor_mat_log)) %>%
+  rename(var1 = Var1, var2 = Var2, cor = Freq)
+
+# Plotting the updated correlation matrix as a heatmap with log(price)
+ggplot(melted_cor_mat_log, aes(x = var1, y = var2, fill = cor)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "steelblue", high = "seagreen", mid = "white", midpoint = 0, limit = c(-1,1), space = "Lab", name="Correlation") +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  labs(title = "Correlation Heatmap with Log(Price)", x = "Variables", y = "Variables")
+
+# Create an interactive correlation plot using the log-transformed data
+iplotCorr(data_numeric_log)
+
+```
+
+
+
+```{r}
+
+# 2. Independence
+
+
+
+
+```
+
+# Homoskedasticity:
+
+Interpretation of the Residuals vs. Fitted Values Plot:
+The residuals in this plot appear to be more evenly distributed across the range of fitted values compared to your original plot.
+There doesn't seem to be a clear funnel-shaped pattern or strong variance trend as the fitted values increase.
+This suggests that the log transformation has helped to correct the heteroscedasticity problem, as the variance of residuals looks more constant across the fitted values.
+
+Based on both the plot and the statistical test, your model seems to be homoscedastic now, and the assumption of constant variance has been largely satisfied after the log transformation.
+
+```{r}
+
+# 3. Homoskedasticity 
+
+# Fit a multiple regression model
+model <- lm(log(price) ~ age + land_value + bathrooms + rooms, data = data_numeric)
+
+# Residuals vs Fitted Plot
+plot(model$fitted.values, resid(model), 
+     xlab = "Fitted Values", 
+     ylab = "Residuals", 
+     main = "Residuals vs Fitted Values")
+abline(h = 0, col = "red")  # Add a horizontal line at 0
+
+```
+```{r}
+library(lmtest)
+bptest(model)
+```
+
+# Normality:
+Mostly normal residuals, with some minor deviations at the tails. However due to the robustness of data with the large sample size it can be said that the Central Limit Theorem applies. 
+
+```{r}
+# 4. Normality
+
+# Fit the regression model
+model <- lm(log(price) ~ age + land_value + bathrooms + rooms, data = data_numeric)
+
+# Q-Q plot for normality check
+qqnorm(resid(model))  # Plot the residuals
+qqline(resid(model), col = "red")  # Add a reference line
+
+
+```
+
+
